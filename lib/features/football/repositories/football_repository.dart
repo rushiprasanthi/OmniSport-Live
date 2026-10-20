@@ -1,3 +1,4 @@
+
 import '../../../core/models/sport_league.dart';
 import '../../../core/models/standings_model.dart';
 import '../../../core/network/api_client.dart';
@@ -7,7 +8,9 @@ import '../models/football_match_model.dart';
 class FootballRepository implements SportRepository<FootballMatchModel> {
   static const String _siteBaseUrl =
       'https://site.api.espn.com/apis/site/v2/sports';
-  static const String _v2BaseUrl = 'https://site.api.espn.com/apis/v2/sports';
+
+  static const String _v2BaseUrl =
+      'https://site.api.espn.com/apis/v2/sports';
 
   final ApiClient _apiClient;
 
@@ -22,29 +25,39 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
     final url = '$_siteBaseUrl/${league.path}/scoreboard';
     final decoded = await _apiClient.getJson(url);
     final events = decoded['events'] as List<dynamic>? ?? [];
+
     final List<FootballMatchModel> matches = events
         .whereType<Map<String, dynamic>>()
-        .map((e) => FootballMatchModel.fromEspnJson(
-              e,
-              league.title,
-              leagueId: league.id,
-            ))
+        .map(
+          (e) => FootballMatchModel.fromEspnJson(
+            e,
+            league.title,
+            leagueId: league.id,
+          ),
+        )
         .toList();
 
     if (includeDemoLive) {
       matches.insert(0, FootballMatchModel.demoLive());
     }
+
     return matches;
   }
 
-  Future<FootballMatchModel> fetchMatchSummary(FootballMatchModel match) async {
+  Future<FootballMatchModel> fetchMatchSummary(
+    FootballMatchModel match,
+  ) async {
     if (match.id == 'demo_live_999') {
       return match;
     }
+
     try {
       final leagueCode =
           match.leagueId ?? _resolveLeagueSegment(match.leagueName);
-      final url = '$_siteBaseUrl/soccer/$leagueCode/summary?event=${match.id}';
+
+      final url =
+          '$_siteBaseUrl/soccer/$leagueCode/summary?event=${match.id}';
+
       final data = await _apiClient.getJson(url);
       final rosters = data['rosters'] as List<dynamic>? ?? [];
 
@@ -55,10 +68,12 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
         if (roster is Map<String, dynamic>) {
           final isHome = roster['homeAway'] == 'home';
           final entries = roster['roster'] as List<dynamic>? ?? [];
+
           final parsedPlayers =
               entries.whereType<Map<String, dynamic>>().take(11).map((p) {
             final athlete = p['athlete'] as Map<String, dynamic>? ?? {};
             final pos = p['position'] as Map<String, dynamic>? ?? {};
+
             return FootballPlayerLineup(
               jersey: p['jersey']?.toString() ?? '-',
               name: athlete['displayName']?.toString() ?? 'Player',
@@ -66,6 +81,7 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
               isStarter: p['starter'] == true,
             );
           }).toList();
+
           if (isHome) {
             homeLineup = parsedPlayers;
           } else {
@@ -90,8 +106,12 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
         homeFormation: match.homeFormation,
         awayFormation: match.awayFormation,
         keyEvents: match.keyEvents,
-        homeLineup: homeLineup.isNotEmpty ? homeLineup : match.homeLineup,
-        awayLineup: awayLineup.isNotEmpty ? awayLineup : match.awayLineup,
+        homeLineup: homeLineup.isNotEmpty
+            ? homeLineup
+            : match.homeLineup,
+        awayLineup: awayLineup.isNotEmpty
+            ? awayLineup
+            : match.awayLineup,
         attendance: match.attendance,
         homePossession: match.homePossession,
         awayPossession: match.awayPossession,
@@ -105,36 +125,48 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
     final match = SportLeagueCatalog.allLeagues
         .where((l) => l.title == title)
         .toList();
+
     if (match.isNotEmpty) {
       return match.first.id;
     }
+
     return 'eng.1';
   }
 
   @override
-  Future<StandingsTable> fetchStandings({required SportLeague league}) async {
+  Future<StandingsTable> fetchStandings({
+    required SportLeague league,
+  }) async {
     try {
       final url = '$_v2BaseUrl/${league.path}/standings';
       final data = await _apiClient.getJson(url);
+
       final children = data['children'] as List<dynamic>? ?? [];
+
       final firstGroup =
           children.isNotEmpty && children.first is Map<String, dynamic>
               ? children.first as Map<String, dynamic>
               : data;
+
       final standingsObj =
           firstGroup['standings'] as Map<String, dynamic>? ?? {};
+
       final entries = standingsObj['entries'] as List<dynamic>? ?? [];
 
       if (entries.isNotEmpty) {
         final List<StandingsRow> rows = [];
+
         for (int i = 0; i < entries.length; i++) {
           final entry = entries[i] as Map<String, dynamic>;
           final team = entry['team'] as Map<String, dynamic>? ?? {};
           final logos = team['logos'] as List<dynamic>? ?? [];
+
           final logoUrl =
               logos.isNotEmpty && logos.first is Map<String, dynamic>
-                  ? (logos.first as Map<String, dynamic>)['href']?.toString()
+                  ? (logos.first as Map<String, dynamic>)['href']
+                      ?.toString()
                   : null;
+
           final stats = entry['stats'] as List<dynamic>? ?? [];
 
           String statVal(String name) {
@@ -146,6 +178,7 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
                     '0';
               }
             }
+
             return '0';
           }
 
@@ -167,6 +200,7 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
             ),
           );
         }
+
         return StandingsTable(
           title: '${league.title} Standings',
           subtitle: 'Live Official League Table',
@@ -175,7 +209,7 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
         );
       }
     } catch (_) {
-      // Fallback to resilient reference table if standings endpoint is unavailable
+      // Use fallback standings if the API request fails.
     }
 
     return StandingsTable(
@@ -209,5 +243,11 @@ class FootballRepository implements SportRepository<FootballMatchModel> {
         ),
       ],
     );
+  }
+
+  // Added to resolve the missing close() method error.
+  void close() {
+    // No cleanup is performed here because ApiClient's
+    // resource-management implementation has not been verified.
   }
 }
